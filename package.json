@@ -1,0 +1,21 @@
+{
+  "name": "@the-north-syndicate/ziix-cmt",
+  "version": "1.0.0",
+  "description": "A content management tool, part of the ZiiX project.",
+  "main": "index.js",
+  "scripts": {
+    "dump": "node ./app",
+    "format": "prettier --write app/"
+  },
+  "author": "The North Syndicate and Developers",
+  "license": "ISC",
+  "dependencies": {
+    "colorette": "^2.0.19",
+    "fast-xml-parser": "^4.0.10",
+    "yargs": "^17.5.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.24.0",
+    "prettier": "2.7.1"
+  }
+}
