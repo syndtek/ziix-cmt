@@ -1,12 +1,18 @@
-const { join } = require("path");
-const { XMLParser } = require("fast-xml-parser");
+// Build-in dependencies
 const readline = require("readline");
+const { join } = require("path");
 const { createReadStream } = require("fs");
 
+// External dependencies
+const { XMLParser } = require("fast-xml-parser");
+const { green, blue } = require("colorette")
+
+// Inner dependencies
 const FsKit = require("./FsKit");
 const NetKit = require("./NetKit");
 
 class CMT {
+  // File Systems constants
   static dumpDirPath = join(process.cwd(), "dump");
   static catalogsDirPath = join(CMT.dumpDirPath, "catalogs");
   static dataPath = join(CMT.dumpDirPath, "release");
@@ -14,19 +20,24 @@ class CMT {
   static releasesListFilePath = join(CMT.dumpDirPath, "releases.txt");
   static reportFilePath = join(CMT.dumpDirPath, "report.json");
 
+  // Another constants
   static sitemapUrl = "https://anilibria.tv/sitemap.xml";
   static perRequestDelay = 600;
+
+  // Variables
   static countOfDownloadedReleases = 0;
   static availableCatalogs = new Set();
 
+  // Dependencies
   static xmlParser = new XMLParser();
 
   static filterSitemap(urls) {
+    const re = new RegExp(/https:\/\/www\.anilibria\.tv\/release\/.+$/);
+    const re2 = new RegExp(
+      /(https:\/\/www\.anilibria\.tv\/release\/)(.+)(.html)/
+    );
+
     return new Promise((resolve) => {
-      const re = new RegExp(/https:\/\/www\.anilibria\.tv\/release\/.+$/);
-      const re2 = new RegExp(
-        /(https:\/\/www\.anilibria\.tv\/release\/)(.+)(.html)/
-      );
       const releasesUrls = [];
 
       urls.map(({ loc }) => {
@@ -41,7 +52,7 @@ class CMT {
   }
 
   static async addCodeToCatalog(catalog, data) {
-    console.log(join(CMT.dumpDirPath, CMT.catalogsDirPath, `${catalog}.json`));
+    console.log(`Release ${blue(data.name)} added to catalog: ${green(catalog)}`);
 
     const catalogFilePath = join(CMT.catalogsDirPath, `${catalog}.json`);
 
@@ -59,20 +70,42 @@ class CMT {
     );
   }
 
+  static async saveReleaseData(data) {
+    const dataPath = join(CMT.dataPath, data.code);
+    await FsKit.mkDir(dataPath);
+    await FsKit.writeFilePromise(
+      join(dataPath, "data.json"),
+      JSON.stringify(data)
+    );
+  }
+
+  static async downloadReleasePosterImage(url, path) {
+    await NetKit.wget(`https://anilibria.tv${url}`, join(path, "poster.jpg"));
+  }
+
   static async dump() {
     // Create dump dir
-    if (!(await FsKit.exist(CMT.dumpDirPath)))
+    if (!(await FsKit.exist(CMT.dumpDirPath))) {
       await FsKit.mkDir(CMT.dumpDirPath);
+      console.log(green("Dump dir created"));
+    }
 
     // Create catalogs dir
-    if (!(await FsKit.exist(CMT.catalogsDirPath)))
+    if (!(await FsKit.exist(CMT.catalogsDirPath))) {
       await FsKit.mkDir(CMT.catalogsDirPath);
+      console.log(green("Catalogs dir created"));
+    }
 
-    if (!(await FsKit.exist(CMT.dataPath))) await FsKit.mkDir(CMT.dataPath);
+    if (!(await FsKit.exist(CMT.dataPath))) {
+      await FsKit.mkDir(CMT.dataPath);
+      console.log(green("Created releases dir"));
+    }
 
     // Download sitemap.xml
-    if (!(await FsKit.exist(CMT.sitemapFilePath)))
+    if (!(await FsKit.exist(CMT.sitemapFilePath))) {
       await NetKit.wget(CMT.sitemapUrl, CMT.sitemapFilePath);
+      console.log(green("sitemap.xml downloaded"));
+    }
 
     // Generate `release` file
     if (!(await FsKit.exist(CMT.releasesListFilePath))) {
@@ -87,6 +120,8 @@ class CMT {
         this.releasesListFilePath,
         releasesList.join("\n")
       );
+
+      console.log(green("Releases.txt created!"));
     }
 
     const readInterface = readline.createInterface({
@@ -106,18 +141,19 @@ class CMT {
         `https://api.anilibria.tv/v2/gettitle?code=${line}`
       );
 
-      /* Create release data dir */
-      await FsKit.mkDir(join(CMT.dataPath, data.code));
-      await FsKit.writeFilePromise(
-        join(CMT.dataPath, data.code, "data.json"),
-        JSON.stringify(data)
-      );
+      console.log(`Release ${green(data.id)} fetched!`);
+
+      // Save release data to .json
+      await CMT.saveReleaseData(data);
+      console.log(`Release ${green(data.id)} data saved`);
 
       // Download poster
-      await NetKit.wget(
-        `https://anilibria.tv${data.posters.original.url}`,
-        join(CMT.dataPath, data.code, "poster.jpg")
+      await CMT.downloadReleasePosterImage(
+        data.posters.original.url,
+        join(CMT.dataPath, data.code)
       );
+
+      console.log(`Release ${green(data.id)} poster downloaded`);
 
       // Add to type catalog
       CMT.availableCatalogs.add(data.type.string || "UNKNOWN");
@@ -144,8 +180,6 @@ class CMT {
       dumpCreatedAt: Date.now(),
       availableCatalogs: Array.from(CMT.availableCatalogs),
     };
-
-    console.log(report);
 
     await FsKit.writeFilePromise(
       CMT.reportFilePath,
